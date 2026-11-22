@@ -1,0 +1,31 @@
+NexoCRM - Usuarios de prueba (creados por prisma/seed.ts)
+===========================================================
+
+Solo para desarrollo local. No usar en producción ni con datos reales.
+Se recrean cada vez que corres: npx prisma db seed
+
+Contraseña de todos: Nexo1234!
+
+-----------------------------------------------------------
+Rol       Nombre               Correo
+-----------------------------------------------------------
+ADMIN     Ana Administradora   admin@nexocrm.dev
+MANAGER   Mario Gerente        manager@nexocrm.dev
+AGENT     Andrea Agente        agente@nexocrm.dev
+-----------------------------------------------------------
+
+Qué puede ver cada uno (estado actual)
+-----------------------------------------------------------
+ADMIN     Todos los contactos. Más adelante: configuración,
+          usuarios y pipelines.
+MANAGER   Todos los contactos del equipo.
+AGENT     Solo los contactos donde es dueño (unos 15 de 30).
+          Si abre la ficha de un contacto ajeno, recibe 404.
+
+Datos asignados por el seed
+-----------------------------------------------------------
+- Los 30 contactos se reparten entre MANAGER y AGENT como dueños.
+- Todos los tickets están asignados a AGENT.
+- ADMIN no es dueño de ningún contacto.
+
+URL de acceso: http://localhost:3000/login
