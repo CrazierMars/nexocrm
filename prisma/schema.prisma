@@ -1,0 +1,306 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+// ---------- Enums ----------
+enum Role {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum LifecycleStage {
+  LEAD
+  PROSPECT
+  CUSTOMER
+  CHURNED
+}
+
+enum DealStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum ActivityType {
+  CALL
+  MEETING
+  NOTE
+  EMAIL
+}
+
+enum TaskStatus {
+  TODO
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Source {
+  MANUAL
+  AI
+}
+
+// ---------- Usuarios y autenticación (Better Auth) ----------
+// User, Session, Account y Verification siguen el esquema de Better Auth.
+// La contraseña NO va en User: Better Auth la guarda hasheada en Account.
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          Role      @default(AGENT)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  ownedContacts   Contact[]  @relation("ContactOwner")
+  ownedCompanies  Company[]  @relation("CompanyOwner")
+  ownedDeals      Deal[]     @relation("DealOwner")
+  assignedTasks   Task[]     @relation("TaskAssignee")
+  assignedTickets Ticket[]   @relation("TicketAssignee")
+  activities      Activity[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// ---------- Empresas y contactos ----------
+model Company {
+  id        String    @id @default(cuid())
+  name      String
+  industry  String?
+  website   String?
+  size      Int?
+  ownerId   String?
+  owner     User?     @relation("CompanyOwner", fields: [ownerId], references: [id])
+  contacts  Contact[]
+  deals     Deal[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Contact {
+  id             String         @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String?        @unique
+  phone          String?
+  lifecycleStage LifecycleStage @default(LEAD)
+  source         String?
+  companyId      String?
+  company        Company?       @relation(fields: [companyId], references: [id])
+  ownerId        String?
+  owner          User?          @relation("ContactOwner", fields: [ownerId], references: [id])
+  score          Int?
+  scoreReasons   Json?
+  churnRisk      RiskLevel?
+  tags           ContactTag[]
+  deals          Deal[]
+  activities     Activity[]
+  tasks          Task[]
+  tickets        Ticket[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([ownerId, lifecycleStage])
+}
+
+model Tag {
+  id       String       @id @default(cuid())
+  name     String       @unique
+  color    String       @default("gray")
+  contacts ContactTag[]
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+}
+
+// ---------- Pipeline y oportunidades ----------
+model Pipeline {
+  id        String          @id @default(cuid())
+  name      String
+  isDefault Boolean         @default(false)
+  stages    PipelineStage[]
+  deals     Deal[]
+}
+
+model PipelineStage {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name        String
+  order       Int
+  probability Int      @default(0)
+  isWon       Boolean  @default(false)
+  isLost      Boolean  @default(false)
+  deals       Deal[]
+
+  @@unique([pipelineId, order])
+}
+
+model Deal {
+  id              String        @id @default(cuid())
+  title           String
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("USD")
+  pipelineId      String
+  pipeline        Pipeline      @relation(fields: [pipelineId], references: [id])
+  stageId         String
+  stage           PipelineStage @relation(fields: [stageId], references: [id])
+  contactId       String
+  contact         Contact       @relation(fields: [contactId], references: [id])
+  companyId       String?
+  company         Company?      @relation(fields: [companyId], references: [id])
+  ownerId         String
+  owner           User          @relation("DealOwner", fields: [ownerId], references: [id])
+  status          DealStatus    @default(OPEN)
+  expectedCloseAt DateTime?
+  lostReason      String?
+  activities      Activity[]
+  tasks           Task[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([stageId, status])
+}
+
+// ---------- Actividades, tareas y tickets ----------
+model Activity {
+  id         String       @id @default(cuid())
+  type       ActivityType
+  subject    String
+  body       String?
+  occurredAt DateTime     @default(now())
+  sentiment  Sentiment?
+  contactId  String
+  contact    Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId     String?
+  deal       Deal?        @relation(fields: [dealId], references: [id])
+  ticketId   String?
+  ticket     Ticket?      @relation(fields: [ticketId], references: [id])
+  userId     String
+  user       User         @relation(fields: [userId], references: [id])
+
+  @@index([contactId, occurredAt])
+}
+
+model Task {
+  id         String     @id @default(cuid())
+  title      String
+  dueAt      DateTime?
+  status     TaskStatus @default(TODO)
+  priority   Priority   @default(MEDIUM)
+  source     Source     @default(MANUAL)
+  assigneeId String
+  assignee   User       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  contactId  String?
+  contact    Contact?   @relation(fields: [contactId], references: [id])
+  dealId     String?
+  deal       Deal?      @relation(fields: [dealId], references: [id])
+  createdAt  DateTime   @default(now())
+
+  @@index([assigneeId, status, dueAt])
+}
+
+model Ticket {
+  id              String       @id @default(cuid())
+  subject         String
+  description     String
+  status          TicketStatus @default(OPEN)
+  priority        Priority     @default(MEDIUM)
+  category        String?
+  sentiment       Sentiment?
+  contactId       String
+  contact         Contact      @relation(fields: [contactId], references: [id])
+  assigneeId      String?
+  assignee        User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  activities      Activity[]
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([status, priority])
+}
